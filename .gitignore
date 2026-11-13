@@ -1,5 +1,5 @@
 secure_message.zip
-secure_message.py
 msg_format.txt
 
 venv_154/
+*.pem
