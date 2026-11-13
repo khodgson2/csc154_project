@@ -3,3 +3,5 @@ msg_format.txt
 
 venv_154/
 *.pem
+
+__pycache__/
