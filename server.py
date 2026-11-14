@@ -249,7 +249,7 @@ def send_message(conn:socket, msg_to:str, msg_from:str, msg, msg_type = "message
 
         elif tamper_flags["change_header"] == True:
             msg_dict["to"] = msg_from
-            print("The sender of the message has been modified.")
+            print("The recipient of the message has been modified.")
             tamper_flags["change_header"] = False 
 
     #send the message

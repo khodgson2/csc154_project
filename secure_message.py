@@ -9,8 +9,8 @@ Modifications to this file:
     print() lines are commented out. 
     After creating the package, sender_encrypt_and_sign encodes all fields of the package
         with base64 and utf-8 so that the package can be sent as a JSON string.
-    sender_encrypt_and_sign signs the hash of a string containing the sender's and recipient's usernames
-        as well as the message.
+    sender_encrypt_and_sign signs the hash of a string containing the sender and recipient usernames,
+        timestamp, encrypted AES key, nonce, and message.
 
     Before decrypting and verifying the message, sender_decrypt_and_verify decodes all fields
     of the package from utf-8 and base64 to bytes.
@@ -22,6 +22,7 @@ Modifications to this file:
 import os
 import base64
 import hashlib
+import time
 
 from cryptography.hazmat.primitives.asymmetric import rsa, padding, utils
 from cryptography.hazmat.primitives import hashes, serialization
@@ -83,10 +84,18 @@ def sender_encrypt_and_sign(message: str, sender_username: str, recipient_userna
     # 2. Encrypt AES key with receiver's public key
     encrypted_aes_key = receiver_public_key.encrypt(aes_key, OAEP)
 
-    #sign message and usernames
-    data_to_sign = data + sender_username.encode("utf-8") + recipient_username.encode("utf-8")
+    #calculate timestamp
+    timestamp = str(time.time())
 
-    # 3. Hash the message and the sender
+    #SHA-256 hash of the sender, recipient, message number, timestamp, 
+    # encrypted key, nonce and ciphertext, joined in that order with a separator character 
+    sep = "|"      # separator character
+    sep = sep.encode("utf-8")
+    data_to_sign = sender_username.encode("utf-8") + sep + recipient_username.encode("utf-8") + sep 
+    data_to_sign += timestamp.encode("utf-8") + sep
+    data_to_sign += encrypted_aes_key + sep + nonce + sep + data
+
+    # 3. hash the message details
     digest = hashlib.sha256(data_to_sign).digest()
     #print(f"[4] SHA-256 hash of message: {digest.hex()}")
 
@@ -98,11 +107,12 @@ def sender_encrypt_and_sign(message: str, sender_username: str, recipient_userna
 
     # This bundle is what would be "sent" to User B
     # encode data so that it can be sent as a JSON string
-    # encode each field with base64, then encode each field with utf-8
+    # encode each field except for timestamp with base64
 
     return {
         "encrypted_aes_key": base64.b64encode(encrypted_aes_key).decode(),
         "nonce": base64.b64encode(nonce).decode(),
+        "timestamp": timestamp,
         "ciphertext": base64.b64encode(ciphertext).decode(),
         "signature": base64.b64encode(signature).decode(),
     }
@@ -121,6 +131,7 @@ def receiver_decrypt_and_verify(package, sender_username:str, recipient_username
     decoded_pkg = {
         "encrypted_aes_key": base64.decodebytes(bytes(package["encrypted_aes_key"], "utf-8")),
         "nonce": base64.decodebytes(bytes(package["nonce"], "utf-8")),
+        "timestamp": package["timestamp"],
         "ciphertext": base64.decodebytes(bytes(package["ciphertext"], "utf-8")),
         "signature": base64.decodebytes(bytes(package["signature"], "utf-8")),
 
@@ -140,8 +151,14 @@ def receiver_decrypt_and_verify(package, sender_username:str, recipient_username
     
     message = data.decode("utf-8")
 
-    # hash the message, the sender's username, and the recipient's username
-    data_to_hash = data + sender_username.encode("utf-8") + recipient_username.encode("utf-8")
+    #SHA-256 hash of the sender, recipient, message number, timestamp, 
+        # encrypted key, nonce and ciphertext, joined in that order with a separator character 
+    sep = "|"      # separator character
+    sep = sep.encode("utf-8")
+    data_to_hash = sender_username.encode("utf-8") + sep + recipient_username.encode("utf-8")
+    data_to_hash += sep + package["timestamp"].encode("utf-8") + sep
+    data_to_hash += decoded_pkg["encrypted_aes_key"] + sep
+    data_to_hash += decoded_pkg["nonce"] + sep + data
 
     # 3. Hash the decrypted message and usernames
     digest = hashlib.sha256(data_to_hash).digest()
